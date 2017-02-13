@@ -1,0 +1,15 @@
+{
+    "version": "0.1.0",
+    "command": "go",
+    "isShellCommand": false,
+    "showOutput": "always",
+    "tasks": [
+        {
+            "taskName": "install",
+            "args": [
+                "-v", "./..."
+            ],
+            "isBuildCommand": true
+        }
+    ]
+}
