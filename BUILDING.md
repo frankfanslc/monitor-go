@@ -1,2 +1,3 @@
 
+    - go get golang.org/x/sys/windows
     - go install ./...
