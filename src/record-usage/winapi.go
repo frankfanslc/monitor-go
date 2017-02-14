@@ -1,7 +1,6 @@
 package main
 
 import "unsafe"
-import "golang.org/x/sys/windows"
 import "syscall"
 
 type (
@@ -21,9 +20,9 @@ const (
 )
 
 var (
-	kernel32 = windows.NewLazySystemDLL("kernel32.dll")
-	user32   = windows.NewLazySystemDLL("user32.dll")
-	ntdll    = windows.NewLazySystemDLL("ntdll.dll")
+	kernel32 = syscall.NewLazyDLL("kernel32.dll")
+	user32   = syscall.NewLazyDLL("user32.dll")
+	ntdll    = syscall.NewLazyDLL("ntdll.dll")
 )
 
 func GetForegroundWindow() HWND {
@@ -55,7 +54,7 @@ func CloseHandle(handle HANDLE) {
 func GetWindowText(hwnd HWND) string {
 	var buffer [256]uint16
 	user32.NewProc("GetWindowTextW").Call(uintptr(hwnd), uintptr(unsafe.Pointer(&buffer)), 256)
-	return windows.UTF16ToString(buffer[:])
+	return syscall.UTF16ToString(buffer[:])
 }
 
 func IsImmersiveProcess(handle HANDLE) bool {
@@ -208,7 +207,7 @@ func GetProcessCommandLine(process HANDLE) string {
 		byteCount = 256 * 2
 	}
 	ReadProcessMemory(process, userProcessParameters.CommandLine.Buffer, unsafe.Pointer(&buffer), uintptr(byteCount))
-	return windows.UTF16ToString(buffer[:])
+	return syscall.UTF16ToString(buffer[:])
 }
 
 func GetProcessCommandLine32(process HANDLE) string {
@@ -228,5 +227,5 @@ func GetProcessCommandLine32(process HANDLE) string {
 		byteCount = 256 * 2
 	}
 	ReadProcessMemory(process, uintptr(userProcessParameters.CommandLine.Buffer), unsafe.Pointer(&buffer), uintptr(byteCount))
-	return windows.UTF16ToString(buffer[:])
+	return syscall.UTF16ToString(buffer[:])
 }
