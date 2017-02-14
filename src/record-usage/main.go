@@ -3,7 +3,7 @@ package main
 import "time"
 import "fmt"
 
-func main() {
+func GetForegroundApp() {
 	seconds := 3
 	time.Sleep(time.Duration(seconds) * time.Second)
 
@@ -21,7 +21,7 @@ func main() {
 	}
 
 	windowText := GetWindowText(hwnd)
-	fmt.Println(windowText)
+	fmt.Println("title: ", windowText)
 
 	if IsImmersiveProcess(processHandle) {
 		CloseHandle(processHandle)

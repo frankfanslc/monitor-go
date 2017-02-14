@@ -7,7 +7,7 @@
         {
             "taskName": "install",
             "args": [
-                "-v", "./src/..."
+                "-v", "-ldflags", "-H=windowsgui", "./src/..."
             ],
             "isBuildCommand": true
         }
