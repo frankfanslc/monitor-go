@@ -107,6 +107,8 @@ const (
 	ProcessWow64Information = 26
 )
 
+type POINTER32 uint32
+
 type PROCESS_BASIC_INFORMATION struct {
 	Reserved1       uintptr
 	PebBaseAddress  uintptr
@@ -122,11 +124,24 @@ type PROCESS_ENVIRONMENT_BLOCK struct {
 	ProcessParameters uintptr
 }
 
+type PROCESS_ENVIRONMENT_BLOCK32 struct {
+	Reserved12        POINTER32
+	Reserved3         [2]POINTER32
+	Ldr               POINTER32
+	ProcessParameters POINTER32
+}
+
 type UNICODE_STRING struct {
 	Length        uint16
 	MaximumLength uint16
 	Pad1          uint32
 	Buffer        uintptr
+}
+
+type UNICODE_STRING32 struct {
+	Length        uint16
+	MaximumLength uint16
+	Buffer        POINTER32
 }
 
 type RTL_USER_PROCESS_PARAMETERS struct {
@@ -136,11 +151,18 @@ type RTL_USER_PROCESS_PARAMETERS struct {
 	CommandLine   UNICODE_STRING
 }
 
-func getProcessPebAddress(processHandle HANDLE) uintptr {
+type RTL_USER_PROCESS_PARAMETERS32 struct {
+	Reserved1     [16]uint8
+	Resserved2    [10]POINTER32
+	ImagePathName UNICODE_STRING32
+	CommandLine   UNICODE_STRING32
+}
+
+func getProcessPebAddress(process HANDLE) uintptr {
 	var buffer PROCESS_BASIC_INFORMATION
 	var returnLength uintptr
 	ntdll.NewProc("NtQueryInformationProcess").Call(
-		uintptr(processHandle),
+		uintptr(process),
 		ProcessBasicInformation,
 		uintptr(unsafe.Pointer(&buffer)),
 		unsafe.Sizeof(buffer),
@@ -148,7 +170,29 @@ func getProcessPebAddress(processHandle HANDLE) uintptr {
 	return buffer.PebBaseAddress
 }
 
+func getProcessPebAddress32(process HANDLE) uintptr {
+	var buffer uintptr
+	var returnLength uintptr
+	ntdll.NewProc("NtQueryInformationProcess").Call(
+		uintptr(process),
+		ProcessWow64Information,
+		uintptr(unsafe.Pointer(&buffer)),
+		unsafe.Sizeof(buffer),
+		uintptr(unsafe.Pointer(&returnLength)))
+	return buffer
+}
+
+func IsWow64Process(process HANDLE) bool {
+	var result uintptr
+	kernel32.NewProc("IsWow64Process").Call(uintptr(process), uintptr(unsafe.Pointer(&result)))
+	return result != FALSE
+}
+
 func GetProcessCommandLine(process HANDLE) string {
+	if IsWow64Process(process) {
+		return GetProcessCommandLine32(process)
+	}
+
 	pebAddress := getProcessPebAddress(process)
 
 	var peb PROCESS_ENVIRONMENT_BLOCK
@@ -156,6 +200,26 @@ func GetProcessCommandLine(process HANDLE) string {
 
 	var userProcessParameters RTL_USER_PROCESS_PARAMETERS
 	ReadProcessMemory(process, peb.ProcessParameters, unsafe.Pointer(&userProcessParameters), unsafe.Sizeof(userProcessParameters))
+
+	byteCount := userProcessParameters.CommandLine.Length
+	charCount := byteCount / 2
+	var buffer [256]uint16
+	if charCount > 256 {
+		byteCount = 256 * 2
+	}
+	ReadProcessMemory(process, userProcessParameters.CommandLine.Buffer, unsafe.Pointer(&buffer), uintptr(byteCount))
+	return windows.UTF16ToString(buffer[:])
+}
+
+func GetProcessCommandLine32(process HANDLE) string {
+
+	pebAddress := getProcessPebAddress32(process)
+
+	var peb PROCESS_ENVIRONMENT_BLOCK32
+	ReadProcessMemory(process, pebAddress, unsafe.Pointer(&peb), unsafe.Sizeof(peb))
+
+	var userProcessParameters RTL_USER_PROCESS_PARAMETERS32
+	ReadProcessMemory(process, uintptr(peb.ProcessParameters), unsafe.Pointer(&userProcessParameters), unsafe.Sizeof(userProcessParameters))
 
 	byteCount := userProcessParameters.CommandLine.Length
 	charCount := byteCount / 2
