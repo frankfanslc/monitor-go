@@ -29,4 +29,7 @@ func main() {
 		processHandle = OpenProcess(processID)
 		fmt.Println("pid: ", processID)
 	}
+
+	commandLine := GetProcessCommandLine(processHandle)
+	fmt.Println("cmd: ", commandLine)
 }

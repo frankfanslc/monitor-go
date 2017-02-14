@@ -23,6 +23,7 @@ const (
 var (
 	kernel32 = windows.NewLazySystemDLL("kernel32.dll")
 	user32   = windows.NewLazySystemDLL("user32.dll")
+	ntdll    = windows.NewLazySystemDLL("ntdll.dll")
 )
 
 func GetForegroundWindow() HWND {
@@ -93,4 +94,75 @@ func GetUniversalApp(hwnd HWND, processID DWORD) (HWND, DWORD) {
 		uintptr(unsafe.Pointer(&parameter)))
 
 	return parameter.childHwnd, parameter.childProcessID
+}
+
+func ReadProcessMemory(process HANDLE, readAddress uintptr, writeBuffer unsafe.Pointer, size uintptr) bool {
+	var bytesRead uintptr
+	result, _, _ := kernel32.NewProc("ReadProcessMemory").Call(uintptr(process), readAddress, uintptr(writeBuffer), size, uintptr(unsafe.Pointer(&bytesRead)))
+	return result != 0
+}
+
+const (
+	ProcessBasicInformation = 0
+	ProcessWow64Information = 26
+)
+
+type PROCESS_BASIC_INFORMATION struct {
+	Reserved1       uintptr
+	PebBaseAddress  uintptr
+	Reserved2       [2]uintptr
+	UniqueProcessId uintptr
+	Reserved3       uintptr
+}
+
+type PROCESS_ENVIRONMENT_BLOCK struct {
+	Reserved12        uintptr
+	Reserved3         [2]uintptr
+	Ldr               uintptr
+	ProcessParameters uintptr
+}
+
+type UNICODE_STRING struct {
+	Length        uint16
+	MaximumLength uint16
+	Pad1          uint32
+	Buffer        uintptr
+}
+
+type RTL_USER_PROCESS_PARAMETERS struct {
+	Reserved1     [16]uint8
+	Resserved2    [10]uintptr
+	ImagePathName UNICODE_STRING
+	CommandLine   UNICODE_STRING
+}
+
+func getProcessPebAddress(processHandle HANDLE) uintptr {
+	var buffer PROCESS_BASIC_INFORMATION
+	var returnLength uintptr
+	ntdll.NewProc("NtQueryInformationProcess").Call(
+		uintptr(processHandle),
+		ProcessBasicInformation,
+		uintptr(unsafe.Pointer(&buffer)),
+		unsafe.Sizeof(buffer),
+		uintptr(unsafe.Pointer(&returnLength)))
+	return buffer.PebBaseAddress
+}
+
+func GetProcessCommandLine(process HANDLE) string {
+	pebAddress := getProcessPebAddress(process)
+
+	var peb PROCESS_ENVIRONMENT_BLOCK
+	ReadProcessMemory(process, pebAddress, unsafe.Pointer(&peb), unsafe.Sizeof(peb))
+
+	var userProcessParameters RTL_USER_PROCESS_PARAMETERS
+	ReadProcessMemory(process, peb.ProcessParameters, unsafe.Pointer(&userProcessParameters), unsafe.Sizeof(userProcessParameters))
+
+	byteCount := userProcessParameters.CommandLine.Length
+	charCount := byteCount / 2
+	var buffer [256]uint16
+	if charCount > 256 {
+		byteCount = 256 * 2
+	}
+	ReadProcessMemory(process, uintptr(userProcessParameters.CommandLine.Buffer), unsafe.Pointer(&buffer), uintptr(byteCount))
+	return windows.UTF16ToString(buffer[:])
 }
