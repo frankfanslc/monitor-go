@@ -1,7 +1,10 @@
 package main
 
-import "unsafe"
-import "syscall"
+import (
+	"os"
+	"syscall"
+	"unsafe"
+)
 
 type (
 	BOOL      int32
@@ -23,8 +26,12 @@ const (
 )
 
 const (
-	WM_DESTROY = 0x0002
-	WM_CLOSE   = 0x0010
+	WM_DESTROY           = 0x0002
+	WM_CLOSE             = 0x0010
+	WM_POWERBROADCAST    = 0x0218
+	WM_WTSSESSION_CHANGE = 0x02B1
+
+	PBT_POWERSETTINGCHANGE = 0x8013
 
 	COLOR_BACKGROUND = 1
 
@@ -63,6 +70,27 @@ const (
 		WS_MINIMIZEBOX |
 		WS_MAXIMIZEBOX)
 )
+
+var (
+	GUID_SESSION_USER_PRESENCE = syscall.GUID{
+		0x3c0f4548,
+		0xc03f,
+		0x4c4d,
+		[8]byte{0xb9, 0xf2, 0x23, 0x7e, 0xde, 0x68, 0x63, 0x76},
+	}
+	GUID_SESSION_DISPLAY_STATUS = syscall.GUID{
+		0x2b84c20e,
+		0xad23,
+		0x4ddf,
+		[8]byte{0x93, 0xdb, 0x05, 0xff, 0xbd, 0x7e, 0xfc, 0xa5},
+	}
+)
+
+type POWERBROADCAST_SETTING struct {
+	PowerSetting syscall.GUID
+	DataLength   DWORD
+	Data         DWORD
+}
 
 var (
 	kernel32 = syscall.NewLazyDLL("kernel32.dll")
@@ -333,11 +361,10 @@ func PostQuitMessage(exitCode int32) {
 	user32.NewProc("PostQuitMessage").Call(uintptr(exitCode))
 }
 
-func CreateWindow(className string, windowName string, wndProc interface{}, windowStyle uint32, instance HINSTANCE, wndExtra uint32) HWND {
+func CreateWindow(className string, windowName string, wndProc interface{}, windowStyle uint32, instance HINSTANCE) HWND {
 	wndProcCallback := syscall.NewCallback(wndProc)
 	wndclass := WNDCLASS{
 		lpfnWndProc:   CALLBACK(wndProcCallback),
-		cbWndExtra:    wndExtra,
 		hbrBackground: HANDLE(COLOR_BACKGROUND),
 		lpszClassName: PWSTR(stringToPVoid(className)),
 	}
@@ -359,7 +386,7 @@ func CreateWindow(className string, windowName string, wndProc interface{}, wind
 		uintptr(0), // hwndParent
 		uintptr(0), // hMenu
 		uintptr(instance),
-		wndProcCallback) // Passed to WM_NCCREATE as CREATESTRUCT.lpCreateParams
+		uintptr(0)) // Passed to WM_NCCREATE as CREATESTRUCT.lpCreateParams
 
 	return HWND(result)
 }
@@ -386,4 +413,20 @@ func MessageLoop() {
 		}
 		procDispatchMessage.Call(msgPtr)
 	}
+}
+
+func SetWindowLongPtr(hwnd HWND, index uintptr, value uintptr) {
+	user32.NewProc("SetWindowLongPtrW").Call(uintptr(hwnd), index, value)
+}
+
+func GetWindowLongPtr(hwnd HWND, index uintptr) uintptr {
+	result, _, _ := user32.NewProc("GetWindowLongPtrW").Call(uintptr(hwnd), index)
+	return result
+}
+
+// OpenStdout open an extra console for Win32 GUI application. Useful for debugging output.
+func OpenStdout() {
+	AllocConsole()
+	// in C/C++: freopen_s(&ignored, "CON", "w", stdout);
+	os.Stdout, _ = os.OpenFile("CONOUT$", os.O_WRONLY, 0777)
 }

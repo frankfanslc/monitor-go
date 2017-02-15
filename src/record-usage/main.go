@@ -1,11 +1,18 @@
 package main
 
-import "time"
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
+
+const (
+	CHECK_INTERNVAL_IN_SECONDS = 5
+	FLUSH_INTERVAL_IN_MINUTES  = 1
+)
 
 func GetForegroundApp() {
-	seconds := 3
-	time.Sleep(time.Duration(seconds) * time.Second)
+	fmt.Println()
+	fmt.Println(time.Now().String())
 
 	hwnd := GetForegroundWindow()
 	if hwnd == 0 {
@@ -13,7 +20,7 @@ func GetForegroundApp() {
 	}
 
 	processID := GetWindowProcessId(hwnd)
-	fmt.Println("pid: ", processID)
+	fmt.Println("pid:", processID)
 
 	processHandle := OpenProcess(processID)
 	if processHandle == 0 {
@@ -21,15 +28,15 @@ func GetForegroundApp() {
 	}
 
 	windowText := GetWindowText(hwnd)
-	fmt.Println("title: ", windowText)
+	fmt.Println("wnd:", windowText)
 
 	if IsImmersiveProcess(processHandle) {
 		CloseHandle(processHandle)
 		hwnd, processID = GetUniversalApp(hwnd, processID)
 		processHandle = OpenProcess(processID)
-		fmt.Println("pid: ", processID)
+		fmt.Println("pid:", processID)
 	}
 
 	commandLine := GetProcessCommandLine(processHandle)
-	fmt.Println("cmd: ", commandLine)
+	fmt.Println("cmd:", commandLine)
 }
