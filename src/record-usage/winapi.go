@@ -18,170 +18,35 @@ type (
 	WCHAR     uint16
 	PWSTR     uintptr
 	CALLBACK  uintptr
+	POINTER32 uint32
 )
 
-const (
-	FALSE = 0
-	TRUE  = 1
-)
-
-const (
-	WM_DESTROY           = 0x0002
-	WM_CLOSE             = 0x0010
-	WM_POWERBROADCAST    = 0x0218
-	WM_WTSSESSION_CHANGE = 0x02B1
-
-	PBT_POWERSETTINGCHANGE = 0x8013
-
-	COLOR_BACKGROUND = 1
-
-	CW_USEDEFAULT = 0x80000000
-)
-
-const (
-	WS_OVERLAPPED       = 0x00000000
-	WS_POPUP            = 0x80000000
-	WS_CHILD            = 0x40000000
-	WS_MINIMIZE         = 0x20000000
-	WS_VISIBLE          = 0x10000000
-	WS_DISABLED         = 0x08000000
-	WS_CLIPSIBLINGS     = 0x04000000
-	WS_CLIPCHILDREN     = 0x02000000
-	WS_MAXIMIZE         = 0x01000000
-	WS_CAPTION          = 0x00C00000
-	WS_BORDER           = 0x00800000
-	WS_DLGFRAME         = 0x00400000
-	WS_VSCROLL          = 0x00200000
-	WS_HSCROLL          = 0x00100000
-	WS_SYSMENU          = 0x00080000
-	WS_THICKFRAME       = 0x00040000
-	WS_GROUP            = 0x00020000
-	WS_TABSTOP          = 0x00010000
-	WS_MINIMIZEBOX      = 0x00020000
-	WS_MAXIMIZEBOX      = 0x00010000
-	WS_TILED            = WS_OVERLAPPED
-	WS_ICONIC           = WS_MINIMIZE
-	WS_SIZEBOX          = WS_THICKFRAME
-	WS_TILEDWINDOW      = WS_OVERLAPPEDWINDOW
-	WS_OVERLAPPEDWINDOW = (WS_OVERLAPPED |
-		WS_CAPTION |
-		WS_SYSMENU |
-		WS_THICKFRAME |
-		WS_MINIMIZEBOX |
-		WS_MAXIMIZEBOX)
-)
-
-var (
-	GUID_SESSION_USER_PRESENCE = syscall.GUID{
-		0x3c0f4548,
-		0xc03f,
-		0x4c4d,
-		[8]byte{0xb9, 0xf2, 0x23, 0x7e, 0xde, 0x68, 0x63, 0x76},
-	}
-	GUID_SESSION_DISPLAY_STATUS = syscall.GUID{
-		0x2b84c20e,
-		0xad23,
-		0x4ddf,
-		[8]byte{0x93, 0xdb, 0x05, 0xff, 0xbd, 0x7e, 0xfc, 0xa5},
-	}
-)
-
-type POWERBROADCAST_SETTING struct {
-	PowerSetting syscall.GUID
-	DataLength   DWORD
-	Data         DWORD
+type WNDCLASS struct {
+	style         uint32
+	lpfnWndProc   CALLBACK
+	cbClsExtra    uint32
+	cbWndExtra    uint32
+	hInstance     HINSTANCE
+	hIcon         HANDLE
+	hCursor       HANDLE
+	hbrBackground HANDLE
+	lpszMenuName  PWSTR
+	lpszClassName PWSTR
 }
 
-var (
-	kernel32 = syscall.NewLazyDLL("kernel32.dll")
-	user32   = syscall.NewLazyDLL("user32.dll")
-	ntdll    = syscall.NewLazyDLL("ntdll.dll")
-
-	procDefWindowProc = user32.NewProc("DefWindowProcW")
-)
-
-func GetForegroundWindow() HWND {
-	hwnd, _, _ := user32.NewProc("GetForegroundWindow").Call()
-	return HWND(hwnd)
+type POINT struct {
+	x int32
+	y int32
 }
 
-func GetWindowProcessId(hwnd HWND) DWORD {
-	var processID DWORD
-	user32.NewProc("GetWindowThreadProcessId").Call(uintptr(hwnd), uintptr(unsafe.Pointer(&processID)))
-	return DWORD(processID)
+type MSG struct {
+	hwnd    HWND
+	message uint32
+	wParam  WPARAM
+	lParam  LPARAM
+	time    uint32
+	pt      POINT
 }
-
-func OpenProcess(processID DWORD) HANDLE {
-	const PROCESS_QUERY_INFORMATION = 0x00000400
-	const PROCESS_VM_READ = 0x0010
-
-	handle, _, _ := kernel32.NewProc("OpenProcess").Call(
-		PROCESS_QUERY_INFORMATION|PROCESS_VM_READ,
-		FALSE,
-		uintptr(processID))
-	return HANDLE(handle)
-}
-
-func CloseHandle(handle HANDLE) {
-	kernel32.NewProc("CloseHandle").Call(uintptr(handle))
-}
-
-func GetWindowText(hwnd HWND) string {
-	var buffer [256]uint16
-	user32.NewProc("GetWindowTextW").Call(uintptr(hwnd), uintptr(unsafe.Pointer(&buffer)), 256)
-	return syscall.UTF16ToString(buffer[:])
-}
-
-func IsImmersiveProcess(handle HANDLE) bool {
-	result, _, _ := user32.NewProc("IsImmersiveProcess").Call(uintptr(handle))
-	return result != FALSE
-}
-
-func GetUniversalApp(hwnd HWND, processID DWORD) (HWND, DWORD) {
-
-	type enumParameter struct {
-		hwnd           HWND
-		processID      DWORD
-		childHwnd      HWND
-		childProcessID DWORD
-	}
-	parameter := enumParameter{hwnd: hwnd, processID: processID}
-
-	callback := syscall.NewCallback(
-		// Use uintptr instead of BOOL, because: syscall.NewCallback requires
-		// the callback's returns size = unsafe.Sizeof(uintptr(0))
-		// ref: \go\src\runtime\syscall_windows.go, syscall.compileCallback()
-		func(childHwnd HWND, lparam LPARAM) uintptr {
-			parameter := (*enumParameter)(unsafe.Pointer(uintptr(lparam)))
-			childProcess := GetWindowProcessId(childHwnd)
-			if childProcess != 0 && childProcess != parameter.processID {
-				parameter.childHwnd = childHwnd
-				parameter.childProcessID = childProcess
-				return FALSE
-			}
-			return TRUE
-		})
-
-	user32.NewProc("EnumChildWindows").Call(
-		uintptr(hwnd),
-		callback,
-		uintptr(unsafe.Pointer(&parameter)))
-
-	return parameter.childHwnd, parameter.childProcessID
-}
-
-func ReadProcessMemory(process HANDLE, readAddress uintptr, writeBuffer unsafe.Pointer, size uintptr) bool {
-	var bytesRead uintptr
-	result, _, _ := kernel32.NewProc("ReadProcessMemory").Call(uintptr(process), readAddress, uintptr(writeBuffer), size, uintptr(unsafe.Pointer(&bytesRead)))
-	return result != 0
-}
-
-const (
-	ProcessBasicInformation = 0
-	ProcessWow64Information = 26
-)
-
-type POINTER32 uint32
 
 type PROCESS_BASIC_INFORMATION struct {
 	Reserved1       uintptr
@@ -230,6 +95,170 @@ type RTL_USER_PROCESS_PARAMETERS32 struct {
 	Resserved2    [10]POINTER32
 	ImagePathName UNICODE_STRING32
 	CommandLine   UNICODE_STRING32
+}
+
+type POWERBROADCAST_SETTING struct {
+	PowerSetting syscall.GUID
+	DataLength   DWORD
+	Data         DWORD
+}
+
+const (
+	FALSE = 0
+	TRUE  = 1
+)
+
+const (
+	WM_DESTROY           = 0x0002
+	WM_CLOSE             = 0x0010
+	WM_POWERBROADCAST    = 0x0218
+	WM_WTSSESSION_CHANGE = 0x02B1
+)
+
+const (
+	WS_OVERLAPPED       = 0x00000000
+	WS_POPUP            = 0x80000000
+	WS_CHILD            = 0x40000000
+	WS_MINIMIZE         = 0x20000000
+	WS_VISIBLE          = 0x10000000
+	WS_DISABLED         = 0x08000000
+	WS_CLIPSIBLINGS     = 0x04000000
+	WS_CLIPCHILDREN     = 0x02000000
+	WS_MAXIMIZE         = 0x01000000
+	WS_CAPTION          = 0x00C00000
+	WS_BORDER           = 0x00800000
+	WS_DLGFRAME         = 0x00400000
+	WS_VSCROLL          = 0x00200000
+	WS_HSCROLL          = 0x00100000
+	WS_SYSMENU          = 0x00080000
+	WS_THICKFRAME       = 0x00040000
+	WS_GROUP            = 0x00020000
+	WS_TABSTOP          = 0x00010000
+	WS_MINIMIZEBOX      = 0x00020000
+	WS_MAXIMIZEBOX      = 0x00010000
+	WS_TILED            = WS_OVERLAPPED
+	WS_ICONIC           = WS_MINIMIZE
+	WS_SIZEBOX          = WS_THICKFRAME
+	WS_TILEDWINDOW      = WS_OVERLAPPEDWINDOW
+	WS_OVERLAPPEDWINDOW = (WS_OVERLAPPED |
+		WS_CAPTION |
+		WS_SYSMENU |
+		WS_THICKFRAME |
+		WS_MINIMIZEBOX |
+		WS_MAXIMIZEBOX)
+)
+
+const (
+	COLOR_BACKGROUND = 1
+
+	CW_USEDEFAULT = 0x80000000
+
+	PBT_POWERSETTINGCHANGE = 0x8013
+
+	PROCESS_QUERY_INFORMATION = 0x00000400
+	PROCESS_VM_READ           = 0x0010
+
+	ProcessBasicInformation = 0
+	ProcessWow64Information = 26
+)
+
+var (
+	GUID_SESSION_USER_PRESENCE = syscall.GUID{
+		0x3c0f4548,
+		0xc03f,
+		0x4c4d,
+		[8]byte{0xb9, 0xf2, 0x23, 0x7e, 0xde, 0x68, 0x63, 0x76},
+	}
+
+	GUID_SESSION_DISPLAY_STATUS = syscall.GUID{
+		0x2b84c20e,
+		0xad23,
+		0x4ddf,
+		[8]byte{0x93, 0xdb, 0x05, 0xff, 0xbd, 0x7e, 0xfc, 0xa5},
+	}
+)
+
+var (
+	kernel32 = syscall.NewLazyDLL("kernel32.dll")
+	user32   = syscall.NewLazyDLL("user32.dll")
+	ntdll    = syscall.NewLazyDLL("ntdll.dll")
+
+	procDefWindowProc = user32.NewProc("DefWindowProcW")
+)
+
+func GetForegroundWindow() HWND {
+	hwnd, _, _ := user32.NewProc("GetForegroundWindow").Call()
+	return HWND(hwnd)
+}
+
+func GetWindowProcessId(hwnd HWND) DWORD {
+	var processID DWORD
+	user32.NewProc("GetWindowThreadProcessId").Call(uintptr(hwnd), uintptr(unsafe.Pointer(&processID)))
+	return DWORD(processID)
+}
+
+func OpenProcess(processID DWORD) HANDLE {
+	handle, _, _ := kernel32.NewProc("OpenProcess").Call(
+		PROCESS_QUERY_INFORMATION|PROCESS_VM_READ,
+		FALSE,
+		uintptr(processID))
+	return HANDLE(handle)
+}
+
+func CloseHandle(handle HANDLE) {
+	kernel32.NewProc("CloseHandle").Call(uintptr(handle))
+}
+
+func GetWindowText(hwnd HWND) string {
+	var buffer [256]uint16
+	user32.NewProc("GetWindowTextW").Call(uintptr(hwnd), uintptr(unsafe.Pointer(&buffer)), 256)
+	return syscall.UTF16ToString(buffer[:])
+}
+
+func IsImmersiveProcess(handle HANDLE) bool {
+	result, _, _ := user32.NewProc("IsImmersiveProcess").Call(uintptr(handle))
+	return result != FALSE
+}
+
+// GetUniversalApp given a host process id and one of its top level window handle, returns the
+// hosted UWP process id and hosted window which is a child to the given top level window
+func GetUniversalApp(hwnd HWND, processID DWORD) (HWND, DWORD) {
+
+	type enumParameter struct {
+		hwnd           HWND
+		processID      DWORD
+		childHwnd      HWND
+		childProcessID DWORD
+	}
+	parameter := enumParameter{hwnd: hwnd, processID: processID}
+
+	callback := syscall.NewCallback(
+		// Use uintptr instead of BOOL, because: syscall.NewCallback requires
+		// the callback's returns size = unsafe.Sizeof(uintptr(0))
+		// ref: \go\src\runtime\syscall_windows.go, syscall.compileCallback()
+		func(childHwnd HWND, lparam LPARAM) uintptr {
+			parameter := (*enumParameter)(unsafe.Pointer(uintptr(lparam)))
+			childProcess := GetWindowProcessId(childHwnd)
+			if childProcess != 0 && childProcess != parameter.processID {
+				parameter.childHwnd = childHwnd
+				parameter.childProcessID = childProcess
+				return FALSE
+			}
+			return TRUE
+		})
+
+	user32.NewProc("EnumChildWindows").Call(
+		uintptr(hwnd),
+		callback,
+		uintptr(unsafe.Pointer(&parameter)))
+
+	return parameter.childHwnd, parameter.childProcessID
+}
+
+func ReadProcessMemory(process HANDLE, readAddress uintptr, writeBuffer unsafe.Pointer, size uintptr) bool {
+	var bytesRead uintptr
+	result, _, _ := kernel32.NewProc("ReadProcessMemory").Call(uintptr(process), readAddress, uintptr(writeBuffer), size, uintptr(unsafe.Pointer(&bytesRead)))
+	return result != 0
 }
 
 func getProcessPebAddress(process HANDLE) uintptr {
@@ -311,45 +340,18 @@ func stringToPVoid(s string) uintptr {
 
 func CreateMutex(name string) HANDLE {
 	initialOwner := FALSE
-	result, _, _ := kernel32.NewProc("CreateMutexW").Call(uintptr(0), uintptr(initialOwner), stringToPVoid(name))
+	result, _, _ := kernel32.NewProc("CreateMutexW").Call(0, uintptr(initialOwner), stringToPVoid(name))
 	return HANDLE(result)
 }
 
 func IsMutexExists(name string) bool {
 	initialOwner := FALSE
-	result, _, err := kernel32.NewProc("CreateMutexW").Call(uintptr(0), uintptr(initialOwner), stringToPVoid(name))
-	return result == uintptr(0) || err == syscall.ERROR_ALREADY_EXISTS
+	result, _, err := kernel32.NewProc("CreateMutexW").Call(0, uintptr(initialOwner), stringToPVoid(name))
+	return result == 0 || err == syscall.ERROR_ALREADY_EXISTS
 }
 
 func AllocConsole() {
 	kernel32.NewProc("AllocConsole").Call()
-}
-
-type WNDCLASS struct {
-	style         uint32
-	lpfnWndProc   CALLBACK
-	cbClsExtra    uint32
-	cbWndExtra    uint32
-	hInstance     HINSTANCE
-	hIcon         HANDLE
-	hCursor       HANDLE
-	hbrBackground HANDLE
-	lpszMenuName  PWSTR
-	lpszClassName PWSTR
-}
-
-type POINT struct {
-	x int32
-	y int32
-}
-
-type MSG struct {
-	hwnd    HWND
-	message uint32
-	wParam  WPARAM
-	lParam  LPARAM
-	time    uint32
-	pt      POINT
 }
 
 func DefWindowProc(hwnd HWND, msg uint32, wparam WPARAM, lparam LPARAM) LRESULT {
@@ -375,7 +377,7 @@ func CreateWindow(className string, windowName string, wndProc interface{}, wind
 	}
 
 	result, _, _ = user32.NewProc("CreateWindowExW").Call(
-		uintptr(0), // extStyle
+		0, // extStyle
 		stringToPVoid(className),
 		stringToPVoid(windowName),
 		uintptr(windowStyle),
@@ -383,10 +385,10 @@ func CreateWindow(className string, windowName string, wndProc interface{}, wind
 		CW_USEDEFAULT,
 		CW_USEDEFAULT,
 		CW_USEDEFAULT,
-		uintptr(0), // hwndParent
-		uintptr(0), // hMenu
+		0, // hwndParent
+		0, // hMenu
 		uintptr(instance),
-		uintptr(0)) // Passed to WM_NCCREATE as CREATESTRUCT.lpCreateParams
+		0) // Passed to WM_NCCREATE as CREATESTRUCT.lpCreateParams
 
 	return HWND(result)
 }
@@ -397,7 +399,7 @@ func GetModuleHandle(name string) uintptr {
 }
 
 func GetCurrentInstance() HINSTANCE {
-	result, _, _ := kernel32.NewProc("GetModuleHandleW").Call(uintptr(0))
+	result, _, _ := kernel32.NewProc("GetModuleHandleW").Call(0)
 	return HINSTANCE(result)
 }
 
@@ -407,7 +409,7 @@ func MessageLoop() {
 	procGetMessage := user32.NewProc("GetMessageW")
 	procDispatchMessage := user32.NewProc("DispatchMessageW")
 	for {
-		result, _, _ := procGetMessage.Call(msgPtr, uintptr(0), uintptr(0), uintptr(0))
+		result, _, _ := procGetMessage.Call(msgPtr, 0, 0, 0)
 		if result == uintptr(FALSE) {
 			break
 		}
