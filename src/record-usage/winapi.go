@@ -85,14 +85,14 @@ type UNICODE_STRING32 struct {
 
 type RTL_USER_PROCESS_PARAMETERS struct {
 	Reserved1     [16]uint8
-	Resserved2    [10]uintptr
+	Reserved2     [10]uintptr
 	ImagePathName UNICODE_STRING
 	CommandLine   UNICODE_STRING
 }
 
 type RTL_USER_PROCESS_PARAMETERS32 struct {
 	Reserved1     [16]uint8
-	Resserved2    [10]POINTER32
+	Reserved2     [10]POINTER32
 	ImagePathName UNICODE_STRING32
 	CommandLine   UNICODE_STRING32
 }
@@ -116,6 +116,7 @@ const (
 )
 
 const (
+	// CreateWindow styles
 	WS_OVERLAPPED       = 0x00000000
 	WS_POPUP            = 0x80000000
 	WS_CHILD            = 0x40000000
@@ -149,17 +150,30 @@ const (
 )
 
 const (
+	// WNDCLASS.hbrBackground
 	COLOR_BACKGROUND = 1
 
+	// CreateWindow
 	CW_USEDEFAULT = 0x80000000
 
+	// WM_POWERBROADCAST
 	PBT_POWERSETTINGCHANGE = 0x8013
 
+	// OpenProcess
 	PROCESS_QUERY_INFORMATION = 0x00000400
 	PROCESS_VM_READ           = 0x0010
 
+	// NtQueryInformationProcess
 	ProcessBasicInformation = 0
 	ProcessWow64Information = 26
+
+	// RegisterPowerSettingNotification
+	DEVICE_NOTIFY_WINDOW_HANDLE  = 0
+	DEVICE_NOTIFY_SERVICE_HANDLE = 1
+
+	// WTSRegisterSessionNotification
+	NOTIFY_FOR_THIS_SESSION = 0
+	NOTIFY_FOR_ALL_SESSIONS = 1
 )
 
 var (
@@ -182,6 +196,7 @@ var (
 	kernel32 = syscall.NewLazyDLL("kernel32.dll")
 	user32   = syscall.NewLazyDLL("user32.dll")
 	ntdll    = syscall.NewLazyDLL("ntdll.dll")
+	wtsapi32 = syscall.NewLazyDLL("wtsapi32.dll")
 
 	procDefWindowProc = user32.NewProc("DefWindowProcW")
 )
@@ -431,4 +446,12 @@ func OpenStdout() {
 	AllocConsole()
 	// in C/C++: freopen_s(&ignored, "CON", "w", stdout);
 	os.Stdout, _ = os.OpenFile("CONOUT$", os.O_WRONLY, 0777)
+}
+
+func RegisterPowerSettingNotification(hwnd HWND, guid *syscall.GUID, flags DWORD) {
+	user32.NewProc("RegisterPowerSettingNotification").Call(uintptr(hwnd), uintptr(unsafe.Pointer(guid)), uintptr(flags))
+}
+
+func WTSRegisterSessionNotification(hwnd HWND, flags DWORD) {
+	wtsapi32.NewProc("WTSRegisterSessionNotification").Call(uintptr(hwnd), uintptr(flags))
 }

@@ -26,8 +26,8 @@ func main() {
 	windowName := "Monitor"
 
 	timer = time.NewTimer(checkInterval)
-
-	CreateWindow(className, windowName, wndProc, WS_OVERLAPPEDWINDOW|WS_VISIBLE, instanceHandle)
+	hwnd := CreateWindow(className, windowName, wndProc, WS_OVERLAPPEDWINDOW|WS_VISIBLE, instanceHandle)
+	RegisterNotifications(hwnd)
 
 	go timerLoop()
 
@@ -59,6 +59,12 @@ func wndProc(hwnd HWND, msg uint32, wparam WPARAM, lparam LPARAM) LRESULT {
 	default:
 	}
 	return DefWindowProc(hwnd, msg, wparam, lparam)
+}
+
+func RegisterNotifications(hwnd HWND) {
+	RegisterPowerSettingNotification(hwnd, &GUID_SESSION_USER_PRESENCE, DEVICE_NOTIFY_WINDOW_HANDLE)
+	RegisterPowerSettingNotification(hwnd, &GUID_SESSION_DISPLAY_STATUS, DEVICE_NOTIFY_WINDOW_HANDLE)
+	WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION)
 }
 
 func onPowerBroadcast(setting *POWERBROADCAST_SETTING) {
