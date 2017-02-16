@@ -7,7 +7,6 @@ import (
 
 const (
 	CHECK_INTERNVAL_IN_SECONDS = 5
-	FLUSH_INTERVAL_IN_MINUTES  = 1
 )
 
 func GetForegroundApp() {
@@ -39,4 +38,6 @@ func GetForegroundApp() {
 
 	commandLine := GetProcessCommandLine(processHandle)
 	fmt.Println("cmd:", commandLine)
+
+	logger.Log(windowText, commandLine)
 }

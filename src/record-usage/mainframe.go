@@ -6,6 +6,7 @@ import (
 )
 
 var (
+	logger        *Logger
 	timer         *time.Timer
 	checkInterval = time.Duration(CHECK_INTERNVAL_IN_SECONDS) * time.Second
 )
@@ -16,6 +17,9 @@ func main() {
 	}
 
 	OpenStdout() // useful for debugging output
+
+	logger = NewLogger(CHECK_INTERNVAL_IN_SECONDS)
+	defer logger.Close()
 
 	instanceHandle := GetCurrentInstance()
 	className := "{8677407E-01E9-4D3E-8BF5-F9082CE08AEB}"
