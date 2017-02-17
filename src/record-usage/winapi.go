@@ -174,21 +174,24 @@ const (
 	// WTSRegisterSessionNotification
 	NOTIFY_FOR_THIS_SESSION = 0
 	NOTIFY_FOR_ALL_SESSIONS = 1
+
+	// SetConsoleCtrlHandler
+	CTRL_CLOSE_EVENT = 2
 )
 
 var (
 	GUID_SESSION_USER_PRESENCE = syscall.GUID{
-		0x3c0f4548,
-		0xc03f,
-		0x4c4d,
-		[8]byte{0xb9, 0xf2, 0x23, 0x7e, 0xde, 0x68, 0x63, 0x76},
+		Data1: 0x3c0f4548,
+		Data2: 0xc03f,
+		Data3: 0x4c4d,
+		Data4: [8]byte{0xb9, 0xf2, 0x23, 0x7e, 0xde, 0x68, 0x63, 0x76},
 	}
 
 	GUID_SESSION_DISPLAY_STATUS = syscall.GUID{
-		0x2b84c20e,
-		0xad23,
-		0x4ddf,
-		[8]byte{0x93, 0xdb, 0x05, 0xff, 0xbd, 0x7e, 0xfc, 0xa5},
+		Data1: 0x2b84c20e,
+		Data2: 0xad23,
+		Data3: 0x4ddf,
+		Data4: [8]byte{0x93, 0xdb, 0x05, 0xff, 0xbd, 0x7e, 0xfc, 0xa5},
 	}
 )
 
@@ -378,7 +381,9 @@ func PostQuitMessage(exitCode int32) {
 	user32.NewProc("PostQuitMessage").Call(uintptr(exitCode))
 }
 
-func CreateWindow(className string, windowName string, wndProc interface{}, windowStyle uint32, instance HINSTANCE) HWND {
+type WndProcFunc func(hwnd HWND, msg uint32, wparam WPARAM, lparam LPARAM) LRESULT
+
+func CreateWindow(className string, windowName string, wndProc WndProcFunc, windowStyle uint32, instance HINSTANCE) HWND {
 	wndProcCallback := syscall.NewCallback(wndProc)
 	wndclass := WNDCLASS{
 		lpfnWndProc:   CALLBACK(wndProcCallback),
@@ -454,4 +459,16 @@ func RegisterPowerSettingNotification(hwnd HWND, guid *syscall.GUID, flags DWORD
 
 func WTSRegisterSessionNotification(hwnd HWND, flags DWORD) {
 	wtsapi32.NewProc("WTSRegisterSessionNotification").Call(uintptr(hwnd), uintptr(flags))
+}
+
+type ControlHandlerFunc func(ctrlType DWORD) uintptr
+
+func SetConsoleCtrlHandler(handler ControlHandlerFunc) {
+	callback := syscall.NewCallback(handler)
+	addCallback := uintptr(TRUE)
+	kernel32.NewProc("SetConsoleCtrlHandler").Call(callback, addCallback)
+}
+
+func ExitThread(exitCode DWORD) {
+	kernel32.NewProc("ExitThread").Call(uintptr(exitCode))
 }

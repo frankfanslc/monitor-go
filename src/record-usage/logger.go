@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-const MAX_ENTRIES_BEFORE_FLUSH = 1
+const MAX_ENTRIES_BEFORE_FLUSH = 3
 
 type logEntry struct {
 	timestamp         time.Time
@@ -30,12 +30,18 @@ func NewLogger(intervalInSeconds uint32) *Logger {
 }
 
 func (x *Logger) Close() {
+	if x.file == nil {
+		return
+	}
 	x.flush()
 	x.file.Close()
+	x.file = nil
 }
 
 func (x *Logger) Log(windowsTitle string, commandLine string) {
-
+	if x.file == nil {
+		return
+	}
 	entry := logEntry{
 		timestamp:         time.Now(),
 		durationInSeconds: x.intervalInSeconds,

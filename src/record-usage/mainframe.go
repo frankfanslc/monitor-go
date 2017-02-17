@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"time"
 	"unsafe"
 )
@@ -16,7 +17,15 @@ func main() {
 		return
 	}
 
-	OpenStdout() // useful for debugging output
+	verbose := flag.Bool("v", false, "open an extra window for debugging output")
+	flag.Parse()
+
+	var windowStyle uint32 = WS_OVERLAPPEDWINDOW
+	if *verbose {
+		OpenStdout() // useful for debugging output
+		SetConsoleCtrlHandler(controlHandler)
+		windowStyle |= WS_VISIBLE // somehow if !visible, the controlHandler won't be called
+	}
 
 	logger = NewLogger(CHECK_INTERNVAL_IN_SECONDS)
 	defer logger.Close()
@@ -26,8 +35,8 @@ func main() {
 	windowName := "Monitor"
 
 	timer = time.NewTimer(checkInterval)
-	hwnd := CreateWindow(className, windowName, wndProc, WS_OVERLAPPEDWINDOW|WS_VISIBLE, instanceHandle)
-	RegisterNotifications(hwnd)
+	hwnd := CreateWindow(className, windowName, wndProc, windowStyle, instanceHandle)
+	registerNotifications(hwnd)
 
 	go timerLoop()
 
@@ -61,7 +70,7 @@ func wndProc(hwnd HWND, msg uint32, wparam WPARAM, lparam LPARAM) LRESULT {
 	return DefWindowProc(hwnd, msg, wparam, lparam)
 }
 
-func RegisterNotifications(hwnd HWND) {
+func registerNotifications(hwnd HWND) {
 	RegisterPowerSettingNotification(hwnd, &GUID_SESSION_USER_PRESENCE, DEVICE_NOTIFY_WINDOW_HANDLE)
 	RegisterPowerSettingNotification(hwnd, &GUID_SESSION_DISPLAY_STATUS, DEVICE_NOTIFY_WINDOW_HANDLE)
 	WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION)
@@ -117,4 +126,14 @@ func startTimer() {
 	// stopTimer()
 
 	timer.Reset(checkInterval)
+}
+
+func controlHandler(ctrlType DWORD) uintptr {
+	if ctrlType == CTRL_CLOSE_EVENT {
+		logger.Log("Console Closed", "Console Closed")
+		logger.Close()
+		// ExitThread(0)
+		// return TRUE
+	}
+	return FALSE
 }
